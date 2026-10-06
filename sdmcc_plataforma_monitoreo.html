@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SDMCC | Plataforma de Monitoreo Cardíaco</title>
+
+<!-- Mapa interactivo: funciona en GitHub Pages con conexión a Internet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+<style>
+:root{
+  --bg:#f3f6fa;--card:#fff;--text:#172033;--muted:#667085;--border:#e4e7ec;
+  --primary:#1769aa;--primary2:#0d4f80;--good:#138a4b;--warning:#b7791f;--danger:#c62828;
+  --shadow:0 8px 24px rgba(15,23,42,.07)
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,Segoe UI,Arial,sans-serif}
+button,input,select{font:inherit}
+.app{min-height:100vh}
+.header{background:#102a43;color:#fff;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:13px}.logo{width:46px;height:46px;border-radius:12px;background:#fff;color:#102a43;display:grid;place-items:center;font-weight:900;font-size:18px}
+.brand h1{font-size:19px;margin:0}.brand p{margin:3px 0 0;font-size:12px;color:#c9d6e3}
+.connection{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.1);padding:9px 13px;border-radius:999px;font-size:12px}
+.live-dot{width:9px;height:9px;background:#39d98a;border-radius:50%;box-shadow:0 0 0 4px rgba(57,217,138,.15)}
+.layout{display:grid;grid-template-columns:225px 1fr;min-height:calc(100vh - 82px)}
+.sidebar{background:#fff;border-right:1px solid var(--border);padding:18px 12px}
+.nav-btn{width:100%;border:0;background:transparent;text-align:left;padding:12px 13px;border-radius:9px;color:#52606d;font-weight:650;cursor:pointer;margin-bottom:4px}
+.nav-btn:hover,.nav-btn.active{background:#eaf3fb;color:#0d4f80}
+.nav-icon{display:inline-block;width:24px}
+.content{padding:24px;max-width:1500px;width:100%;margin:auto}
+.page{display:none}.page.active{display:block}
+.page-title{display:flex;justify-content:space-between;align-items:end;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+.page-title h2{margin:0;font-size:25px}.page-title p{margin:5px 0 0;color:var(--muted);font-size:13px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:15px;padding:17px;box-shadow:var(--shadow)}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}
+.metric-label{color:var(--muted);font-size:12px;font-weight:700}.metric-value{font-size:31px;font-weight:850;margin:7px 0 1px}.metric-unit{font-size:12px;color:var(--muted)}
+.metric-foot{font-size:11px;margin-top:7px}.good-text{color:var(--good)}.warning-text{color:var(--warning)}.danger-text{color:var(--danger)}
+.main-grid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(280px,.75fr);gap:14px;margin-top:14px}
+.card-title{font-size:14px;font-weight:800;margin-bottom:12px}
+.chart-box{height:310px;position:relative}.chart-box canvas{width:100%;height:100%;display:block}
+.chart-legend{display:flex;gap:16px;color:var(--muted);font-size:11px;margin-top:8px}
+.dot-blue{width:9px;height:9px;background:#1769aa;border-radius:50%;display:inline-block}
+.ai-box{border-left:4px solid var(--primary);background:#f7fafc;padding:14px;border-radius:9px;line-height:1.55;font-size:13px}
+.badges{display:flex;gap:7px;flex-wrap:wrap;margin-top:13px}.badge{padding:5px 9px;border-radius:999px;font-size:10px;font-weight:800}.badge.good{background:#e9f8ef;color:#126b3d}.badge.warning{background:#fff6df;color:#8a5a09}.badge.danger{background:#ffeded;color:#a61b1b}.badge.blue{background:#eaf3fb;color:#0d4f80}
+.control-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.btn{border:1px solid var(--border);background:#fff;border-radius:8px;padding:9px 12px;cursor:pointer;font-weight:700;color:#344054}.btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}.btn:disabled{opacity:.5;cursor:not-allowed}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.table-wrap{overflow:auto}.table{width:100%;border-collapse:collapse;font-size:12px}.table th,.table td{padding:10px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}.table th{font-size:10px;color:var(--muted);text-transform:uppercase}
+#map{height:500px;border-radius:12px;overflow:hidden}
+.info-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.info{background:#f7f9fb;padding:12px;border-radius:9px}.info small{color:var(--muted);display:block}.info strong{display:block;margin-top:4px}
+.progress{height:8px;background:#edf0f4;border-radius:20px;overflow:hidden}.progress span{height:100%;display:block;background:#1769aa;border-radius:20px}
+.notice{padding:12px;background:#f8fafc;border:1px solid var(--border);border-radius:9px;color:#475467;font-size:12px;line-height:1.55}
+.footer-note{font-size:11px;color:var(--muted);margin-top:18px}
+@media(max-width:900px){.layout{grid-template-columns:1fr}.sidebar{border-right:0;border-bottom:1px solid var(--border);display:flex;overflow:auto;padding:8px}.nav-btn{width:auto;white-space:nowrap;margin:0}.content{padding:15px}.metrics{grid-template-columns:repeat(2,1fr)}.main-grid,.grid2,.grid3{grid-template-columns:1fr}}
+@media(max-width:500px){.metrics{grid-template-columns:1fr 1fr}.metric-value{font-size:25px}.chart-box{height:240px}.header{padding:14px}.brand h1{font-size:16px}}
+</style>
+</head>
+
+<body>
+<div class="app">
+<header class="header">
+  <div class="brand">
+    <div class="logo">SD</div>
+    <div>
+      <h1>SDMCC · Sistema Digital y Medidor de Chequeo Cardíaco</h1>
+      <p>Plataforma de monitoreo, registro y análisis de frecuencia cardíaca</p>
+    </div>
+  </div>
+  <div class="connection"><span class="live-dot"></span><span id="connectionText">Brazalete SDMCC-01 conectado</span></div>
+</header>
+
+<div class="layout">
+<aside class="sidebar">
+  <button class="nav-btn active" data-page="dashboard"><span class="nav-icon">♥</span>Monitoreo</button>
+  <button class="nav-btn" data-page="history"><span class="nav-icon">▤</span>Historial</button>
+  <button class="nav-btn" data-page="ai"><span class="nav-icon">✦</span>Análisis IA</button>
+  <button class="nav-btn" data-page="map-page"><span class="nav-icon">⌖</span>Ubicación</button>
+  <button class="nav-btn" data-page="device"><span class="nav-icon">◉</span>Dispositivo</button>
+</aside>
+
+<main class="content">
+
+<section id="dashboard" class="page active">
+  <div class="page-title">
+    <div><h2>Monitoreo cardíaco</h2><p>Lectura actual y comportamiento de la sesión.</p></div>
+    <div class="badge blue" id="sessionStatus">MONITOREO ACTIVO</div>
+  </div>
+
+  <div class="metrics">
+    <div class="card"><div class="metric-label">Frecuencia actual</div><div class="metric-value" id="currentBpm">76</div><div class="metric-unit">BPM</div><div class="metric-foot good-text" id="currentState">● Dentro del rango de referencia</div></div>
+    <div class="card"><div class="metric-label">Promedio de sesión</div><div class="metric-value" id="avgBpm">75</div><div class="metric-unit">BPM</div><div class="metric-foot">Últimas lecturas</div></div>
+    <div class="card"><div class="metric-label">Mínimo registrado</div><div class="metric-value" id="minBpm">70</div><div class="metric-unit">BPM</div><div class="metric-foot">Sesión actual</div></div>
+    <div class="card"><div class="metric-label">Máximo registrado</div><div class="metric-value" id="maxBpm">82</div><div class="metric-unit">BPM</div><div class="metric-foot">Sesión actual</div></div>
+  </div>
+
+  <div class="main-grid">
+    <div class="card">
+      <div class="card-title">Frecuencia cardíaca en tiempo real</div>
+      <div class="chart-box"><canvas id="pulseChart"></canvas></div>
+      <div class="chart-legend"><span><i class="dot-blue"></i> Frecuencia cardíaca</span><span id="lastUpdate">Actualizado ahora</span></div>
+      <div class="control-row">
+        <button class="btn primary" id="toggleBtn">Pausar monitoreo</button>
+        <button class="btn" id="readingBtn">Registrar lectura</button>
+        <button class="btn" id="resetBtn">Nueva sesión</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Interpretación automática</div>
+      <div class="ai-box" id="quickAi"></div>
+      <div class="badges"><span class="badge good" id="signalBadge">SEÑAL ÓPTIMA</span><span class="badge good" id="alertBadge">SIN ALERTAS</span></div>
+      <div style="margin-top:17px">
+        <div class="metric-label">Calidad de señal</div>
+        <div style="margin:7px 0 5px"><div class="progress"><span id="signalBar" style="width:98%"></span></div></div>
+        <small style="color:var(--muted)" id="signalValue">98%</small>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="history" class="page">
+  <div class="page-title"><div><h2>Historial de mediciones</h2><p>Registro cronológico de las lecturas obtenidas.</p></div></div>
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Hora</th><th>BPM</th><th>Variación</th><th>Señal</th><th>Estado</th></tr></thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="ai" class="page">
+  <div class="page-title"><div><h2>Análisis inteligente</h2><p>Interpretación automática basada en la tendencia de los registros.</p></div></div>
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">Informe de la sesión</div>
+      <div class="ai-box" id="fullAi"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Indicadores calculados</div>
+      <div class="info-grid">
+        <div class="info"><small>Promedio</small><strong id="aiAvg">75 BPM</strong></div>
+        <div class="info"><small>Rango observado</small><strong id="aiRange">70–82 BPM</strong></div>
+        <div class="info"><small>Variabilidad</small><strong id="aiVar">Baja</strong></div>
+        <div class="info"><small>Alertas</small><strong id="aiAlerts">0</strong></div>
+      </div>
+      <div class="notice" style="margin-top:12px">El análisis automático sirve para organizar e interpretar los registros del proyecto. No constituye un diagnóstico médico.</div>
+    </div>
+  </div>
+</section>
+
+<section id="map-page" class="page">
+  <div class="page-title"><div><h2>Ubicación del dispositivo</h2><p>Visualización de la zona donde se encuentra asociado el SDMCC-01.</p></div></div>
+  <div class="card">
+    <div id="map"></div>
+    <div class="info-grid" style="margin-top:13px">
+      <div class="info"><small>Dispositivo</small><strong>SDMCC-01 · Activo</strong></div>
+      <div class="info"><small>Zona de demostración</small><strong>Soyapango, San Salvador, El Salvador</strong></div>
+      <div class="info"><small>Estado GPS</small><strong>Ubicación disponible</strong></div>
+      <div class="info"><small>Última actualización</small><strong id="mapTime">Ahora</strong></div>
+    </div>
+  </div>
+</section>
+
+<section id="device" class="page">
+  <div class="page-title"><div><h2>Estado del dispositivo</h2><p>Información del brazalete y comunicación con la plataforma.</p></div></div>
+  <div class="grid3">
+    <div class="card"><div class="card-title">Brazalete inteligente</div><div class="info"><small>Identificador</small><strong>SDMCC-01</strong></div><div class="info" style="margin-top:8px"><small>Estado</small><strong class="good-text">Conectado</strong></div></div>
+    <div class="card"><div class="card-title">Transmisión</div><div class="info"><small>Modo</small><strong>Tiempo real</strong></div><div class="info" style="margin-top:8px"><small>Calidad</small><strong id="deviceSignal">98%</strong></div></div>
+    <div class="card"><div class="card-title">Procesamiento</div><div class="info"><small>Recepción</small><strong>Correcta</strong></div><div class="info" style="margin-top:8px"><small>Lecturas registradas</small><strong id="readingCount">0</strong></div></div>
+  </div>
+  <div class="card" style="margin-top:14px"><div class="card-title">Flujo funcional del SDMCC</div><div class="notice">Sensor cardíaco → captura de señal → procesamiento de frecuencia → transmisión al sistema → registro de datos → análisis automático → visualización para seguimiento.</div></div>
+</section>
+
+<div class="footer-note">SDMCC · Sistema Digital y Medidor de Chequeo Cardíaco · Plataforma demostrativa para el proyecto académico.</div>
+</main>
+</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(() => {
+"use strict";
+
+/* ============================================================
+   SDMCC — MOTOR DE SIMULACIÓN
+   La plataforma genera lecturas plausibles y suaves.
+   No usa saltos grandes ni cambios bruscos artificiales.
+   ============================================================ */
+
+const $ = id => document.getElementById(id);
+
+const state = {
+  running: true,
+  history: [],
+  timer: null,
+  lastBpm: 76,
+  mapReady: false,
+  map: null
+};
+
+/* Valores iniciales coherentes: sesión estable */
+const initial = [74,75,75,76,77,76,75,74,73,74,75,76,77,78,77,76,75,76,77,78];
+
+function nowTime(offsetMs=0){
+  const d = new Date(Date.now()-offsetMs);
+  return d.toLocaleTimeString("es-SV",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+}
+
+function clamp(v,min,max){return Math.max(min,Math.min(max,v));}
+
+/*
+  Generación realista:
+  - parte del último valor;
+  - cambios normales de 0–2 BPM la mayoría de veces;
+  - ocasionalmente 3 BPM;
+  - mantiene una tendencia suave;
+  - no baja/sube de golpe.
+*/
+function nextBpm(){
+  const prev = state.lastBpm;
+  const r = Math.random();
+
+  let delta;
+  if(r < 0.72) delta = Math.random() < .5 ? -1 : 1;
+  else if(r < .94) delta = Math.random() < .5 ? -2 : 2;
+  else delta = Math.random() < .5 ? -3 : 3;
+
+  /* Corrección suave hacia una zona basal de 76 BPM */
+  if(prev > 84) delta = Math.min(delta,0);
+  if(prev < 68) delta = Math.max(delta,0);
+
+  const value = clamp(prev + delta, 65, 90);
+  state.lastBpm = value;
+  return value;
+}
+
+function addReading(bpm=nextBpm(), manual=false){
+  const signal = Math.round(clamp(96 + (Math.random()*4-2),92,99));
+  state.history.push({
+    time: nowTime(),
+    bpm,
+    signal,
+    manual
+  });
+  if(state.history.length > 60) state.history.shift();
+  render();
+}
+
+function stats(){
+  const vals = state.history.map(x=>x.bpm);
+  if(!vals.length) return {avg:0,min:0,max:0,range:0,sd:0};
+  const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
+  const min = Math.min(...vals), max=Math.max(...vals);
+  const variance = vals.reduce((s,v)=>s+Math.pow(v-avg,2),0)/vals.length;
+  return {avg,min,max,range:max-min,sd:Math.sqrt(variance)};
+}
+
+function classify(bpm){
+  if(bpm >= 100) return {label:"Frecuencia elevada",cls:"danger"};
+  if(bpm < 60) return {label:"Frecuencia baja",cls:"warning"};
+  return {label:"Dentro del rango de referencia",cls:"good"};
+}
+
+function updateAI(){
+  const s=stats(), latest=state.history[state.history.length-1]?.bpm || state.lastBpm;
+  const status=classify(latest);
+  const alerts=state.history.filter(x=>x.bpm>=100 || x.bpm<60).length;
+
+  let variability = s.sd < 2 ? "Baja" : s.sd < 4 ? "Moderada" : "Alta";
+
+  let summary;
+  if(alerts===0){
+    summary = `La sesión presenta una frecuencia cardíaca estable, con un promedio de <b>${Math.round(s.avg)} BPM</b> y un rango observado de <b>${s.min}–${s.max} BPM</b>. La variación entre lecturas es ${variability.toLowerCase()}, sin episodios que superen los umbrales de alerta configurados.`;
+  }else{
+    summary = `Se detectaron <b>${alerts}</b> lectura(s) fuera del rango configurado. El promedio de la sesión es <b>${Math.round(s.avg)} BPM</b>. Se recomienda observar la evolución del registro y, si la alteración persiste o existen síntomas, realizar una valoración profesional.`;
+  }
+
+  $("quickAi").innerHTML =
+    `<b>Estado actual:</b> ${status.label}.<br><br>`+
+    `<b>Promedio:</b> ${Math.round(s.avg)} BPM.<br>`+
+    `<b>Tendencia:</b> ${variability.toLowerCase()} variación.<br><br>`+
+    `<b>Interpretación:</b> ${alerts===0 ? "no se observan cambios bruscos en la tendencia actual." : "existen registros que requieren atención en el análisis."}`;
+
+  $("fullAi").innerHTML =
+    `<b>Resumen:</b> ${summary}<br><br>`+
+    `<b>Patrón observado:</b> ${variability==="Baja" ? "las lecturas se mantienen cercanas al nivel basal y evolucionan de manera gradual." : "se aprecia una variación mayor entre algunas lecturas, por lo que conviene revisar la tendencia completa."}<br><br>`+
+    `<b>Recomendación del sistema:</b> continuar registrando mediciones y comparar sesiones para identificar cambios respecto al patrón habitual.`;
+
+  $("aiAvg").textContent=`${Math.round(s.avg)} BPM`;
+  $("aiRange").textContent=`${s.min}–${s.max} BPM`;
+  $("aiVar").textContent=variability;
+  $("aiAlerts").textContent=alerts;
+
+  const alertBadge=$("alertBadge");
+  if(alerts===0){
+    alertBadge.textContent="SIN ALERTAS";
+    alertBadge.className="badge good";
+  }else{
+    alertBadge.textContent=`${alerts} ALERTA(S)`;
+    alertBadge.className="badge danger";
+  }
+}
+
+function renderMetrics(){
+  const s=stats(), latest=state.history[state.history.length-1]?.bpm ?? state.lastBpm;
+  $("currentBpm").textContent=latest;
+  $("avgBpm").textContent=Math.round(s.avg || latest);
+  $("minBpm").textContent=s.min || latest;
+  $("maxBpm").textContent=s.max || latest;
+
+  const status=classify(latest);
+  $("currentState").textContent="● "+status.label;
+  $("currentState").className="metric-foot "+(status.cls==="good"?"good-text":status.cls==="warning"?"warning-text":"danger-text");
+
+  const signal=state.history[state.history.length-1]?.signal || 98;
+  $("signalValue").textContent=signal+"%";
+  $("signalBar").style.width=signal+"%";
+  $("deviceSignal").textContent=signal+"%";
+  $("readingCount").textContent=state.history.length;
+  $("lastUpdate").textContent="Actualizado "+nowTime();
+}
+
+function renderHistory(){
+  const body=$("historyBody");
+  body.innerHTML="";
+  [...state.history].reverse().slice(0,30).forEach((r,i)=>{
+    const prev=state.history[state.history.length-2-i]?.bpm;
+    const diff=prev==null ? "—" : ((r.bpm-prev>0?"+":"")+String(r.bpm-prev)+" BPM");
+    const c=classify(r.bpm);
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${r.time}</td><td><b>${r.bpm}</b></td><td>${diff}</td><td>${r.signal}%</td><td><span class="badge ${c.cls}">${c.label}</span></td>`;
+    body.appendChild(tr);
+  });
+}
+
+function drawChart(){
+  const canvas=$("pulseChart");
+  const rect=canvas.getBoundingClientRect();
+  const dpr=window.devicePixelRatio||1;
+  canvas.width=Math.max(1,rect.width*dpr);
+  canvas.height=Math.max(1,rect.height*dpr);
+  const ctx=canvas.getContext("2d");
+  ctx.scale(dpr,dpr);
+  const w=rect.width,h=rect.height;
+
+  ctx.clearRect(0,0,w,h);
+  ctx.strokeStyle="#e7edf3";ctx.lineWidth=1;
+  for(let i=0;i<5;i++){
+    const y=22+i*(h-45)/4;
+    ctx.beginPath();ctx.moveTo(42,y);ctx.lineTo(w-12,y);ctx.stroke();
+    ctx.fillStyle="#8a99a8";ctx.font="10px Arial";
+    ctx.fillText(String(90-i*5),7,y+3);
+  }
+
+  const vals=state.history.slice(-30).map(x=>x.bpm);
+  if(vals.length<2)return;
+  const minY=60,maxY=95,left=42,right=12,top=18,bottom=22;
+  const xStep=(w-left-right)/(vals.length-1);
+
+  ctx.beginPath();
+  vals.forEach((v,i)=>{
+    const x=left+i*xStep;
+    const y=top+(maxY-v)/(maxY-minY)*(h-top-bottom);
+    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  });
+  ctx.strokeStyle="#1769aa";ctx.lineWidth=2.6;ctx.lineJoin="round";ctx.lineCap="round";ctx.stroke();
+
+  const last=vals[vals.length-1];
+  const lx=left+(vals.length-1)*xStep;
+  const ly=top+(maxY-last)/(maxY-minY)*(h-top-bottom);
+  ctx.fillStyle="#1769aa";ctx.beginPath();ctx.arc(lx,ly,4,0,Math.PI*2);ctx.fill();
+}
+
+function render(){
+  renderMetrics();
+  renderHistory();
+  updateAI();
+  drawChart();
+}
+
+function seed(){
+  initial.forEach((v,i)=>{
+    state.history.push({time:nowTime((initial.length-1-i)*15000),bpm:v,signal:97+Math.floor(Math.random()*3),manual:false});
+  });
+  state.lastBpm=initial[initial.length-1];
+  render();
+}
+
+function tick(){
+  if(state.running)addReading();
+}
+
+$("toggleBtn").addEventListener("click",()=>{
+  state.running=!state.running;
+  $("toggleBtn").textContent=state.running?"Pausar monitoreo":"Reanudar monitoreo";
+  $("sessionStatus").textContent=state.running?"MONITOREO ACTIVO":"MONITOREO PAUSADO";
+  $("sessionStatus").className="badge "+(state.running?"blue":"warning");
+});
+
+$("readingBtn").addEventListener("click",()=>addReading(state.lastBpm,true));
+
+$("resetBtn").addEventListener("click",()=>{
+  state.history=[];
+  state.lastBpm=76;
+  seed();
+});
+
+window.addEventListener("resize",drawChart);
+
+/* Navegación */
+document.querySelectorAll(".nav-btn").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    document.querySelectorAll(".nav-btn").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+    btn.classList.add("active");
+    $(btn.dataset.page).classList.add("active");
+    if(btn.dataset.page==="map-page") initMap();
+    if(btn.dataset.page==="dashboard") setTimeout(drawChart,20);
+  });
+});
+
+/* Mapa interactivo: ubicación de demostración */
+function initMap(){
+  if(state.mapReady)return;
+  state.mapReady=true;
+
+  const lat=13.7347, lng=-89.1500; // zona de demostración en Soyapango
+  state.map=L.map("map").setView([lat,lng],14);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+    maxZoom:19,
+    attribution:"© OpenStreetMap"
+  }).addTo(state.map);
+
+  const marker=L.marker([lat,lng]).addTo(state.map);
+  marker.bindPopup("<b>SDMCC-01</b><br>Dispositivo conectado<br>Monitoreo cardíaco activo.").openPopup();
+
+  L.circle([lat,lng],{
+    radius:650,color:"#1769aa",fillColor:"#1769aa",fillOpacity:.12
+  }).addTo(state.map);
+
+  L.marker([lat+0.008,lng-0.012]).addTo(state.map)
+    .bindPopup("<b>Punto de utilización</b><br>Zona de demostración del sistema.");
+
+  L.marker([lat-0.006,lng+0.012]).addTo(state.map)
+    .bindPopup("<b>Centro de monitoreo</b><br>Recepción y análisis de datos.");
+
+  $("mapTime").textContent=nowTime();
+}
+
+seed();
+state.timer=setInterval(tick,4000);
+
+/* El sistema se actualiza cada 4 segundos, pero el cambio normal es pequeño.
+   Esto evita el efecto artificial de saltos bruscos. */
+})();
+</script>
+</body>
+</html>
